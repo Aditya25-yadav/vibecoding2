@@ -1,0 +1,1779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brand Analytics Dashboard - Carbon Footprint</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        #three-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        /* Ripple Effect Styles */
+        .ripple-container {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .ripple {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            pointer-events: none;
+            background: repeating-conic-gradient(
+                from 0deg,
+                #00ff00 0deg,
+                #00ffff 60deg,
+                #0000ff 120deg,
+                #ff00ff 180deg,
+                #ff0000 240deg,
+                #00ff00 360deg
+            );
+            background-size: 200% 200%;
+            filter: blur(12px);
+            opacity: 0.5;
+            mix-blend-mode: screen;
+            animation:
+                flow 1.8s linear infinite,
+                scaleFade 1.6s ease-out forwards;
+        }
+
+        @keyframes flow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+
+        @keyframes scaleFade {
+            0% { transform: scale(0.2); opacity: 0.5; }
+            70% { transform: scale(4); opacity: 0.3; }
+            100% { transform: scale(6); opacity: 0; }
+        }
+
+        /* Loader Styles */
+        .loader {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100vh;
+            background: black;
+            color: white;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+
+        .loader.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .progress-container {
+            width: 300px;
+            height: 30px;
+            background-color: #444;
+            border-radius: 5px;
+            border: 2px solid white;
+            position: relative;
+            overflow: visible;
+            transition: border 0.5s ease-in-out, background-color 0.5s ease-in-out;
+        }
+
+        .progress-container.no-border {
+            border: none;
+            background-color: transparent;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background-color: white;
+            transition: width 0.1s linear;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .progress-left {
+            height: 100%;
+            width: 70%;
+            background-color: white;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transform-origin: top right;
+            transition: all 1.2s ease-in-out;
+        }
+
+        .progress-right {
+            height: 100%;
+            width: 30%;
+            background-color: white;
+            position: absolute;
+            top: 0;
+            right: 0;
+            opacity: 0;
+            transition: all 1.2s ease-in-out;
+        }
+
+        .progress-left.animate {
+            opacity: 1;
+            transform: rotate(90deg);
+        }
+
+        .progress-right.animate {
+            opacity: 1;
+        }
+
+        .timer {
+            font-size: 3rem;
+            font-weight: bold;
+            color: white;
+            margin-top: 20px;
+            transform: perspective(800px) rotateX(20deg);
+            transition: filter 0.1s linear, opacity 1s linear;
+        }
+
+        .timer.hidden {
+            opacity: 0;
+            filter: blur(20px);
+        }
+
+        .final-animation {
+            animation: expandAndFade 5s ease-in-out forwards;
+            transform-origin: center center;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes expandAndFade {
+            0% { transform: scale(1) rotate(0deg) translate(0, 0); opacity: 1; }
+            50% { transform: scale(75) rotate(180deg) translate(-25%, -25%); opacity: 1; }
+            100% { transform: scale(150) rotate(360deg) translate(-50%, -50%); opacity: 0.5; }
+        }
+
+        /* Brand Kits Styles */
+        body.brand-kits-active {
+            background: transparent;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .brand-kits-container {
+            max-width: 480px;
+            width: 100%;
+            background: rgba(15, 15, 15, 0.8);
+            border: 2px solid transparent;
+            border-radius: 16px;
+            padding: 24px;
+            position: relative;
+            backdrop-filter: blur(10px);
+            display: none;
+            animation: fadeInUp 0.6s ease-out;
+            margin-bottom: 20px;
+        }
+
+        .brand-kits-container.visible {
+            display: block;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .brand-kits-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            padding: 2px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6, #06b6d4);
+            border-radius: 16px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            -webkit-mask-composite: xor;
+            opacity: 0.8;
+        }
+
+        .section-header {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-tiles {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .brand-tile {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: rgba(30, 30, 30, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        .brand-tile:hover {
+            background: rgba(40, 40, 40, 0.8);
+            border-color: rgba(139, 92, 246, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .brand-tile.selected {
+            background: rgba(139, 92, 246, 0.1);
+            border-color: rgba(139, 92, 246, 0.5);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+        }
+
+        .brand-tile.selected::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1));
+            border-radius: 12px;
+            opacity: 0.5;
+        }
+
+        .checkbox-container {
+            position: relative;
+            margin-right: 16px;
+            flex-shrink: 0;
+        }
+
+        .checkbox {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .checkbox:checked {
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            border-color: #8b5cf6;
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+        }
+
+        .checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            opacity: 1;
+            animation: checkmark 0.3s ease-in-out;
+        }
+
+        @keyframes checkmark {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+
+        .brand-logo {
+            margin-right: 16px;
+            flex-shrink: 0;
+        }
+
+        .logo-circles {
+            display: flex;
+            gap: 4px;
+        }
+
+        .logo-circle {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+
+        .brand-tile:hover .logo-circle {
+            transform: scale(1.1);
+        }
+
+        .ecorp .logo-circle:nth-child(1) { background: #ef4444; }
+        .ecorp .logo-circle:nth-child(2) { background: #f59e0b; }
+        .ecorp .logo-circle:nth-child(3) { background: #10b981; }
+
+        .icorp .logo-circle:nth-child(1) { background: #3b82f6; }
+        .icorp .logo-circle:nth-child(2) { background: #8b5cf6; }
+        .icorp .logo-circle:nth-child(3) { background: #ec4899; }
+
+        .agency .logo-circle:nth-child(1) { background: #06b6d4; }
+        .agency .logo-circle:nth-child(2) { background: #8b5cf6; }
+        .agency .logo-circle:nth-child(3) { background: #f59e0b; }
+
+        .brand-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            flex-grow: 1;
+            letter-spacing: -0.2px;
+        }
+
+        .settings-icon {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            color: rgba(255, 255, 255, 0.6);
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .settings-icon:hover {
+            color: #8b5cf6;
+            transform: scale(1.1) rotate(15deg);
+        }
+
+        .settings-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Graph Container Styles */
+        .graph-container {
+            max-width: 1200px;
+            width: 90%;
+            background: #f5f1eb;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            display: none;
+            animation: slideIn 0.6s ease-out;
+            margin: 20px 0;
+        }
+
+        .graph-container.visible {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+            min-height: 450px;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-title {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 20px;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: #2d2d2d;
+            margin-bottom: 15px;
+        }
+
+        .metric-unit {
+            font-size: 1.2rem;
+            color: #666;
+            margin-left: 8px;
+        }
+
+        .metric-change {
+            font-size: 1rem;
+            color: #8b4444;
+            margin-bottom: 25px;
+        }
+
+        .metric-change.negative {
+            color: #059669;
+        }
+
+        .metric-change.positive {
+            color: #8b4444;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            margin-top: 25px;
+            min-height: 200px;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .timeline-year {
+            font-size: 1rem;
+            color: #666;
+            width: 50px;
+        }
+
+        .timeline-bar {
+            flex: 1;
+            height: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+            margin: 0 15px;
+        }
+
+        .timeline-fill {
+            height: 100%;
+            background: #8b4444;
+            border-radius: 5px;
+        }
+
+        .timeline-value {
+            font-size: 1rem;
+            color: #2d2d2d;
+            min-width: 90px;
+            text-align: right;
+        }
+
+        .action-links {
+            display: flex;
+            gap: 25px;
+            margin-top: 25px;
+        }
+
+        .action-link {
+            color: #8b4444;
+            text-decoration: none;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .action-link:hover {
+            transform: translateX(5px);
+            color: #a55555;
+        }
+
+        /* Testimonials Styles */
+        .testimonials-section {
+            width: 100%;
+            max-width: 1200px;
+            padding: 0 2rem;
+            margin: 20px 0;
+        }
+
+        .section-title {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #ffffff, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.025em;
+            position: relative;
+            text-align: center;
+        }
+
+        .section-title::before {
+            content: '';
+            position: absolute;
+            top: -2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(135deg, #8b5cf6, #a855f7);
+            border-radius: 2px;
+        }
+
+        .section-subtitle {
+            font-size: 1.25rem;
+            color: #9ca3af;
+            max-width: 600px;
+            margin: 0 auto 4rem;
+            text-align: center;
+        }
+
+        .testimonials-container {
+            display: flex;
+            gap: 2rem;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scroll-behavior: smooth;
+            padding: 1rem 0 2rem 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .testimonials-container::-webkit-scrollbar {
+            display: none;
+        }
+
+        .testimonials-container {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .testimonial-card {
+            min-width: 320px;
+            max-width: 380px;
+            background-color: #1a1a1a;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            scroll-snap-align: start;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .testimonial-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(168, 85, 247, 0.1));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            border-radius: 12px;
+        }
+
+        .testimonial-card::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r="0.5" fill="%23ffffff" opacity="0.05"/></pattern></defs><rect width="100" height="100" fill="url(%23dots)"/></svg>');
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .testimonial-card:hover::after {
+            opacity: 1;
+        }
+
+        .testimonial-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(139, 92, 246, 0.2);
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        .testimonial-card:hover::before {
+            opacity: 1;
+        }
+
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin: 0 auto 1.5rem;
+            overflow: hidden;
+            border: 2px solid rgba(139, 92, 246, 0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .customer-name {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .customer-title {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-bottom: 1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .rating {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .star {
+            color: #fbbf24;
+            font-size: 1.125rem;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+        }
+
+        .star.half {
+            position: relative;
+        }
+
+        .star.half::after {
+            content: '\f005';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 50%;
+            overflow: hidden;
+            color: #fbbf24;
+        }
+
+        .star.empty {
+            color: #374151;
+        }
+
+        .company-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            margin: 0 auto 1rem;
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        .company-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
+        }
+
+        .testimonial-quote {
+            font-style: italic;
+            font-size: 1rem;
+            line-height: 1.7;
+            color: #e5e7eb;
+            position: relative;
+            z-index: 1;
+        }
+
+        .testimonial-quote::before {
+            content: '"';
+            font-size: 3rem;
+            color: rgba(139, 92, 246, 0.2);
+            position: absolute;
+            top: -1rem;
+            left: -0.5rem;
+            font-family: serif;
+            line-height: 1;
+        }
+
+        .testimonial-quote::after {
+            content: '"';
+            font-size: 3rem;
+            color: rgba(139, 92, 246, 0.2);
+            position: absolute;
+            bottom: -1.5rem;
+            right: -0.5rem;
+            font-family: serif;
+            line-height: 1;
+        }
+
+        .scroll-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #374151;
+            transition: background-color 0.3s ease;
+        }
+
+        .dot.active {
+            background-color: #8b5cf6;
+        }
+
+        .testimonials-wrapper {
+            position: relative;
+        }
+
+        .testimonials-wrapper::before,
+        .testimonials-wrapper::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .testimonials-wrapper::before {
+            left: 0;
+            background: linear-gradient(90deg, #0a0a0a, transparent);
+        }
+
+        .testimonials-wrapper::after {
+            right: 0;
+            background: linear-gradient(270deg, #0a0a0a, transparent);
+        }
+
+        /* Marquee Styles */
+        .marquee-container {
+            background-color: #000000;
+            padding: 40px 0;
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+            width: 100%;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            margin-top: auto;
+        }
+
+        .marquee-track {
+            display: inline-flex;
+            align-items: center;
+            animation: scroll 20s linear infinite;
+            gap: 80px;
+        }
+
+        .logo-set {
+            display: inline-flex;
+            align-items: center;
+            gap: 80px;
+            flex-shrink: 0;
+        }
+
+        .logo-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            padding: 15px 25px;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+
+        .logo-link:hover {
+            transform: scale(1.05);
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .logo {
+            height: 32px;
+            width: auto;
+            filter: brightness(0) invert(1);
+            transition: all 0.3s ease;
+        }
+
+        .cursor-logo { width: 100px; }
+        .brex-logo { width: 70px; }
+        .remote-logo { width: 90px; }
+        .arc-logo { width: 50px; }
+        .runway-logo { width: 95px; }
+        .descript-logo { width: 100px; }
+
+        .tooltip {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 10;
+        }
+
+        .marquee-container:hover .tooltip {
+            opacity: 1;
+        }
+
+        .marquee-container:hover .marquee-track {
+            animation-play-state: paused;
+            opacity: 0.3;
+        }
+
+        @keyframes scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .brand-kits-container, .graph-container, .testimonials-section {
+                margin: 10px;
+                padding: 20px;
+            }
+
+            .section-header {
+                font-size: 20px;
+            }
+
+            .brand-tile {
+                padding: 14px;
+            }
+
+            .brand-name {
+                font-size: 15px;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .metric-card {
+                padding: 20px;
+                min-height: 400px;
+            }
+
+            .metric-title {
+                font-size: 1rem;
+            }
+
+            .metric-value {
+                font-size: 2rem;
+            }
+
+            .metric-unit {
+                font-size: 1rem;
+            }
+
+            .metric-change {
+                font-size: 0.9rem;
+            }
+
+            .chart-container {
+                height: 200px;
+            }
+
+            .timeline-year {
+                font-size: 0.9rem;
+                width: 40px;
+            }
+
+            .timeline-bar {
+                height: 8px;
+                margin: 0 10px;
+            }
+
+            .timeline-value {
+                font-size: 0.9rem;
+                min-width: 80px;
+            }
+
+            .action-links {
+                gap: 15px;
+            }
+
+            .action-link {
+                font-size: 0.9rem;
+            }
+
+            .testimonials-container {
+                gap: 1.5rem;
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+
+            .testimonial-card {
+                min-width: 80vw;
+                max-width: 80vw;
+            }
+
+            .section-title {
+                font-size: 2.5rem;
+            }
+
+            .section-subtitle {
+                font-size: 1.125rem;
+            }
+
+            .testimonials-wrapper::before,
+            .testimonials-wrapper::after {
+                width: 50px;
+            }
+
+            .marquee-container {
+                padding: 30px 0;
+                height: 100px;
+            }
+
+            .marquee-track, .logo-set {
+                gap: 60px;
+            }
+
+            .logo {
+                height: 28px;
+            }
+
+            .cursor-logo { width: 85px; }
+            .brex-logo { width: 60px; }
+            .remote-logo { width: 75px; }
+            .arc-logo { width: 40px; }
+            .runway-logo { width: 80px; }
+            .descript-logo { width: 85px; }
+
+            .tooltip {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .testimonials-section {
+                padding: 0 1rem;
+            }
+
+            .testimonials-container {
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+            }
+
+            .testimonial-card {
+                min-width: 100vw;
+                max-width: calc(100vw - 2rem);
+                padding: 1.5rem;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .section-subtitle {
+                font-size: 1rem;
+            }
+
+            .testimonials-wrapper::before,
+            .testimonials-wrapper::after {
+                display: none;
+            }
+
+            .marquee-container {
+                padding: 20px 0;
+                height: 80px;
+            }
+
+            .marquee-track, .logo-set {
+                gap: 50px;
+            }
+
+            .logo {
+                height: 24px;
+            }
+
+            .cursor-logo { width: 70px; }
+            .brex-logo { width: 50px; }
+            .remote-logo { width: 65px; }
+            .arc-logo { width: 35px; }
+            .runway-logo { width: 70px; }
+            .descript-logo { width: 70px; }
+
+            .tooltip {
+                font-size: 11px;
+                padding: 5px 10px;
+            }
+        }
+
+        /* Accessibility */
+        .checkbox:focus, .brand-tile:focus, .settings-icon:focus {
+            outline: 2px solid #8b5cf6;
+            outline-offset: 2px;
+        }
+
+        .settings-icon:focus {
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loader -->
+    <div class="loader">
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-fill" id="progressFill"></div>
+            <div class="progress-left" id="progressLeft"></div>
+            <div class="progress-right" id="progressRight"></div>
+        </div>
+        <div class="timer" id="timer">100</div>
+    </div>
+
+    <!-- Ripple Container -->
+    <div class="ripple-container" id="rippleContainer"></div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Brand Kits Component -->
+        <div class="brand-kits-container">
+            <h2 class="section-header">Brand Kits</h2>
+            <div class="brand-tiles" role="radiogroup" aria-label="Brand Kit Selection">
+                <div class="brand-tile ecorp selected" role="radio" aria-checked="true" tabindex="0" data-brand="ecorp">
+                    <div class="checkbox-container">
+                        <input type="radio" name="brand" value="ecorp" class="checkbox" checked aria-label="Select ECorp brand kit">
+                    </div>
+                    <div class="brand-logo">
+                        <div class="logo-circles">
+                            <div class="logo-circle"></div>
+                            <div class="logo-circle"></div>
+                            <div class="logo-circle"></div>
+                        </div>
+                    </div>
+                    <div class="brand-name">ECorp</div>
+                    <div class="settings-icon" role="button" aria-label="ECorp settings" tabindex="0">
+                        <svg viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="brand-tile icorp" role="radio" aria-checked="false" tabindex="0" data-brand="icorp">
+                    <div class="checkbox-container">
+                        <input type="radio" name="brand" value="icorp" class="checkbox" aria-label="Select ICorp brand kit">
+                    </div>
+                    <div class="brand-logo">
+                        <div class="logo-circles">
+                            <div class="logo-circle"></div>
+                            <div class="logo-circle"></div>
+                            <div class="logo-circle"></div>
+                        </div>
+                    </div>
+                    <div class="brand-name">ICorp</div>
+                    <div class="settings-icon" role="button" aria-label="ICorp settings" tabindex="0">
+                        <svg viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </div>
+                <div class="brand-tile agency" role="radio" aria-checked="false" tabindex="0" data-brand="agency">
+                    <div class="checkbox-container">
+                        <input type="radio" name="brand" value="agency" class="checkbox" aria-label="Select The Agency brand kit">
+                    </div>
+                    <div class="brand-logo">
+                        <div class="logo-circles">
+                            <div class="logo-circle"></div>
+                            <div class="logo-circle"></div>
+                            <div class="logo-circle"></div>
+                        </div>
+                    </div>
+                    <div class="brand-name">The Agency</div>
+                    <div class="settings-icon" role="button" aria-label="The Agency settings" tabindex="0">
+                        <svg viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M11.49 3.17-.38-1.56-2.6-1.98 0 a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978 a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106 a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0 a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106 a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978 a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106 a1.532 1.532 0 01-2.287-.947zM10 13 a3 3 0 100-6 3 3 0 0 6 z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graph Container -->
+        <div class="graph-container">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-title">Managed Portfolio Carbon Footprint</div>
+                    <div class="metric-value" id="carbonValue"></div>
+                    <div class="metric-change" id="carbonChange"></div>
+                    <div class="chart-container">
+                        <canvas id="carbonChart"></canvas>
+                    </div>
+                    <div class="action-links">
+                        <div href="#" class="action-link" id="carbonBreakdown">See full breakdown</div>
+                        <a href="#" class="action-link" id="carbonDownload">Download the data</a>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title" id="energyTitle">Managed Portfolio Energy Intensity</div>
+                    <div class="metric-value" id="energyValue"></div>
+                    <div class="metric-change" id="energyChange"></div>
+                    <div class="timeline-container">
+                        <div class="timeline-item">
+                            <span class="timeline-year">2022</span>
+                            <div class="timeline-bar">
+                                <div class="timeline2022" id="timeline2022"></div>
+                            </div>
+                            <span class="timeline-value" id="value2022"></span>
+                        </div>
+                        <div class="timeline-item">
+                            <span class="timeline-year">2021</span>
+                            <div class="timeline-bar">
+                                <div class="timeline-fill" id="timeline2021"></div>
+                            </div>
+                            <span class="timeline-value" id="value2021"></span>
+                        </div>
+                        <div class="timeline-item">
+                            <span class="timeline-year">2020</span>
+                            <div class="timeline-bar">
+                                <div class="timeline-fill" id="timeline2020"></div>
+                            </div>
+                            <span class="timeline-value" id="value2020"></span>
+                        </div>
+                        <div class="timeline-item">
+                            <span class="timeline-year">2019</span>
+                            <div class="timeline-bar">
+                                <div class="timeline-fill" id="timeline2019"></div>
+                            </div>
+                            <span class="timeline-value" id="value2019"></span>
+                        </div>
+                    </div>
+                    <div class="action-links">
+                        <a href="#" class="action-link" id="energyDownload">Download the data</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Testimonials Section -->
+        <section class="testimonials-section">
+            <div class="section-header">
+            <h2 class="section-title">What Our Customers Say About Carbon Reduction</h2>
+            <p class="section-subtitle">Hear from businesses leveraging our platform to minimize their environmental impact.</p>
+        </div>
+
+        <div class="testimonials-wrapper">
+            <div class="testimonials-container" id="testimonialsContainer">
+                <div class="testimonial-card">
+                    <div class="company-logo">
+                        <img src="https://images.unsplash.com/photo-1572044164-ad60d1282ddea?auto=format&fit=crop&w=100&q=80" alt="GreenTech Logo">
+                    </div>
+                    <div class="avatar">
+                        <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=1170&q=80" alt="Michael Chen">
+                    </div>
+                    <h3 class="customer-name">Michael Chen</h3>
+                    <p class="customer-title">CEO at GreenTech</p>
+                    <div class="rating">
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star-half-alt star half"></i>
+                    </div>
+                    <div class="testimonial-quote">
+                        This platform transformed our carbon tracking, cutting emissions by 20% in six months with actionable data.
+                    </div>
+                </div>
+
+                <div class="testimonial-card">
+                    <div class="company-logo">
+                        <img src="https://images.unsplash.com/photo-1560472354-b33de396e43?auto=format&fit=crop&w=100&q=80" alt="EcoInnovate Logo">
+                    </div>
+                    <div class="avatar">
+                        <img src="https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=1361&q=80" alt="Emily Rodriguez">
+                    </div>
+                    <h3 class="customer-name">Emily Rodriguez</h3>
+                    <p class="customer-title">Sustainability Lead at EcoInnovate</p>
+                    <div class="rating">
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                    </div>
+                    <div class="testimonial-quote">
+                        The intuitive dashboard boosted our sustainability efforts, reducing energy use by 30% across our facilities.
+                    </div>
+                   
+                </div>
+
+                <div class="testimonial-card">
+                    <div class="company-logo">
+                        <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=100&q=80" alt="CleanEnergy Solutions Logo">
+                    </div>
+                    <div class="avatar">
+                        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=687&q=80" alt="David Park">
+                    </div>
+                    <h3 class="customer-name">David Park</h3>
+                    <p class="customer-title">CTO at CleanEnergy Solutions</p>
+                    <div class="rating">
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="fas fa-star star"></i>
+                        <i class="far fa-star star empty"></i>
+                    </div>
+                    <div class="testimonial-quote">
+                        Seamless integration and robust analytics helped us optimize our carbon reduction roadmap effectively.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="scroll-indicator" id="scrollIndicator">
+            <div class="dot active"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+    </section>
+
+    <!-- Partner Logo Marquee -->
+    <div class="marquee-container">
+        <div class="tooltip">Our Sustainability Partners</div>
+        <div class="marquee-track">
+            <!-- First set -->
+            <div class="logo-set">
+                <a href="https://cursor.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Cursor - AI for Sustainability">
+                    <svg class="logo cursor-logo" viewBox="0 0 100 32" fill="white">
+                        <circle cx="6" cy="16" r="4" fill="white"/>
+                        <path d="M6 8 L6 24 M2 16 L10 16" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+                        <text x="16" y="21" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="white">Cursor</text>
+                    </svg>
+                </a>
+                <a href="https://brex.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Brex - Green Finance Solutions">
+                    <svg class="logo brex-logo" viewBox="0 0 70 32" fill="white">
+                        <path d="M4 26V6h8c4 0 7 2.5 7 6.5c0 2-1 3.5-2.5 4.5C18 17.5 19 19 19 21.5c0 4-3 4.5-7 4.5H4zm4-16h4c1.5 0 3-1 3-2.5S13.5 10 12 10H8v6zm0 4v8h5c1.5 0 3-1 3-2.5S14.5 18 13 18H8z" fill="white"/>
+                        <text x="24" y="21" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white">rex</text>
+                    </svg>
+                </a>
+                <a href="https://remote.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Remote - Sustainable HR Platform">
+                    <svg class="logo remote-logo" viewBox="0 0 90 32" fill="white">
+                        <path d="M4 26V6h8c4 0 7 3 7 7c0 2.5-1.5 4.5-3.5 5.5L19 26h-4l-3-7H8v7H4zm4-11h4c2 0 3.5-1.5 3.5-3.5S14 8 12 8H8v7z" fill="white"/>
+                        <text x="24" y="21" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="white">emote</text>
+                    </svg>
+                </a>
+                <a href="https://arc.net" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Arc - Eco-Friendly Browser">
+                    <svg class="logo arc-logo" viewBox="0 0 50 32" fill="none">
+                        <path d="M4 26C4 14 12 6 22 6h6c10 0 18 8 18 20" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M25 26L25 6" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </a>
+                <a href="https://runwayml.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Runway - AI for Environmental Insights">
+                    <svg class="logo runway-logo" viewBox="0 0 95 32" fill="white">
+                        <path d="M4 26V6h8c4 0 7 3 7 7c0 2.5-1.5 4.5-3.5 5.5L19 26h-4l-3-7H8v7H4zm4-11h4c2 0 3.5-1.5 3.5-3.5S14 8 12 8H8v7z" fill="white"/>
+                        <polygon points="24,10 24,22 32,16" fill="white"/>
+                        <text x="36" y="21" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="white">unway</text>
+                    </svg>
+                </a>
+                <a href="https://descript.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Descript - Sustainable Media Tools">
+                    <svg class="logo descript-logo" viewBox="0 0 100 32" fill="white">
+                        <path d="M4 26V6h8c6 0 10 4 10 10s-4 10-10 10H4zm4-4h4c4 0 6-2 6-6s-2-6-6-6H8v12z" fill="white"/>
+                        <text x="26" y="21" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="white">escript</text>
+                    </svg>
+                </a>
+            </div>
+            <!-- Second set -->
+            <div class="logo-set">
+                <a href="https://cursor.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Cursor - AI for Sustainability">
+                    <svg class="logo cursor-logo" viewBox="0 0 100 32" fill="white">
+                        <circle cx="6" cy="16" r="4" fill="white"/>
+                        <path d="M6 8 L6 24 M2 16 L10 16" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+                        <text x="16" y="21" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="white">Cursor</text>
+                    </svg>
+                </a>
+                <a href="https://brex.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Brex - Green Finance Solutions">
+                    <svg class="logo brex-logo" viewBox="0 0 70 32" fill="white">
+                        <path d="M4 26V6h8c4 0 7 2.5 7 6.5c0 2-1 3.5-2.5 4.5C18 17.5 19 19 19 21.5c0 4-3 4.5-7 4.5H4zm4-16h4c1.5 0 3-1 3-2.5S13.5 10 12 10H8v6zm0 4v8h5c1.5 0 3-1 3-2.5S14.5 18 13 18H8z" fill="white"/>
+                        <text x="24" y="21" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="600" fill="white">rex</text>
+                    </svg>
+                </a>
+                <a href="https://remote.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Remote - Sustainable HR Platform">
+                    <svg class="logo remote-logo" viewBox="0 0 90 32" fill="white">
+                        <path d="M4 26V6h8c4 0 7 3 7 7c0 2.5-1.5 4.5-3.5 5.5L19 26h-4l-3-7H8v7H4zm4-11h4c2 0 3.5-1.5 3.5-3.5S14 8 12 8H8v7z" fill="white"/>
+                        <text x="24" y="21" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="white">emote</text>
+                    </svg>
+                </a>
+                <a href="https://arc.net" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Arc - Eco-Friendly Browser">
+                    <svg class="logo arc-logo" viewBox="0 0 50 32" fill="none">
+                        <path d="M4 26C4 14 12 6 22 6h6c10 0 18 8 18 20" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M25 26L25 6" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </a>
+                <a href="https://runwayml.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Runway - AI for Environmental Insights">
+                    <svg class="logo runway-logo" viewBox="0 0 95 32" fill="white">
+                        <path d="M4 26V6h8c4 0 7 3 7 7c0 2.5-1.5 4.5-3.5 5.5L19 26h-4l-3-7H8v7H4zm4-11h4c2 0 3.5-1.5 3.5-3.5S14 8 12 8H8v7z" fill="white"/>
+                        <polygon points="24,10 24,22 32,16" fill="white"/>
+                        <text x="36" y="21" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="white">unway</text>
+                    </svg>
+                </a>
+                <a href="https://descript.com" target="_blank" rel="noopener noreferrer" class="logo-link" aria-label="Descript - Sustainable Media Tools">
+                    <svg class="logo descript-logo" viewBox="0 0 100 32" fill="white">
+                        <path d="M4 26V6h8c6 0 10 4 10 10s-4 10-10 10H4zm4-4h4c4 0 6-2 6-6s-2-6-6-6H8v12z" fill="white"/>
+                        <text x="26" y="21" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="white">escript</text>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Three.js Background Animation
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#111');
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.z = 10;
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.domElement.id = 'three-canvas';
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        function createCross(color) {
+            const group = new THREE.Group();
+            const material = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.3 });
+            const geo = new THREE.CylinderGeometry(0.15, 0.15, 1.5, 32);
+            const x = new THREE.Mesh(geo, material);
+            x.rotation.z = Math.PI / 2;
+            const y = new THREE.Mesh(geo, material);
+            const z = new THREE.Mesh(geo, material);
+            z.rotation.x = Math.PI / 2;
+            group.add(x, y, z);
+            return group;
+        }
+
+        const colors = [0x10b981, 0x06b6d4, 0x8b5cf6];
+        const crosses = [];
+        for (let i = 0; i < 30; i++) {
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const cross = createCross(color);
+            cross.position.set(
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 8
+            );
+            cross.rotation.set(
+                Math.random() * Math.PI,
+                Math.random() * Math.PI,
+                Math.random() * Math.PI
+            );
+            cross.userData.originalPosition = cross.position.clone();
+            crosses.push(cross);
+            scene.add(cross);
+        }
+
+        let impactTimer = 0;
+        function triggerStrike() {
+            crosses.forEach(cross => {
+                const dir = cross.position.clone().normalize().multiplyScalar(0.7);
+                cross.position.add(dir);
+            });
+            impactTimer = 30;
+        }
+
+        function animateThree() {
+            scene.rotation.y += 0.003;
+            scene.rotation.x += 0.001;
+            if (impactTimer > 0) {
+                crosses.forEach(cross => {
+                    cross.position.lerp(cross.userData.originalPosition, 0.1);
+                });
+                impactTimer--;
+            }
+            renderer.render(scene, camera);
+        }
+
+        // Ripple Effect
+        const rippleContainer = document.getElementById('rippleContainer');
+        function createFlowyRipple(event) {
+            const ripple = document.createElement('div');
+            ripple.className = 'ripple';
+            const rect = rippleContainer.getBoundingClientRect();
+            const x = event.clientX - rect.left - 150;
+            const y = event.clientY - rect.top - 150;
+            ripple.style.left = `${x}px`;
+            ripple.style.top = `${y}px`;
+            rippleContainer.appendChild(ripple);
+            ripple.addEventListener('animationend', () => {
+                ripple.remove();
+            });
+        }
+
+        // Combined Click Handler
+        window.addEventListener('click', (event) => {
+            triggerStrike();
+            createFlowyRipple(event);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            animateThree();
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Brand Dashboard Logic
+        const brandData = {
+            ecorp: {
+                carbon: { value: 45048, change: '+16%', years: [45048, 14111, 32813, 38673], unit: 'tCO₂e', title: 'Managed Portfolio Carbon Footprint' },
+                energyIntensity: { value: 123, change: '-22%', years: [123, 128, 135, 157], unit: 'kWh/m²', title: 'Managed Portfolio Energy Intensity' }
+            },
+            icorp: {
+                carbon: { value: 40000, change: '+10%', years: [40000, 12000, 30000, 36000], unit: 'tCO₂e', title: 'Managed Portfolio Carbon Footprint' },
+                energyIntensity: { value: 110, change: '-15%', years: [110, 125, 130, 145], unit: 'kWh/m²', title: 'Managed Portfolio Energy Intensity' }
+            },
+            agency: {
+                carbon: { value: 35000, change: '+5%', years: [35000, 10000, 28000, 33000], unit: 'tCO₂e', title: 'Managed Portfolio Carbon Footprint' },
+                energyIntensity: { value: 100, change: '-10%', years: [100, 115, 120, 135], unit: 'kWh/m²', title: 'Managed Portfolio Energy Intensity' }
+            }
+        };
+
+        // Loader Script
+        let time = 100;
+        const progressFill = document.getElementById('progressFill');
+        const progressLeft = document.getElementById('progressLeft');
+        const progressRight = document.getElementById('progressRight');
+        const timerDisplay = document.getElementById('timer');
+        const progressContainer = document.getElementById('progressContainer');
+        const loader = document.querySelector('.loader');
+        const brandKitsContainer = document.querySelector('.brand-kits-container');
+
+        const interval = setInterval(() => {
+            time--;
+            timerDisplay.textContent = time;
+            const percent = ((100 - time) / 100) * 100;
+            progressFill.style.width = percent + '%';
+            timerDisplay.style.filter = `blur(${(100 - time) / 20}px)`;
+
+            if (time <= 0) {
+                clearInterval(interval);
+                timerDisplay.classList.add('hidden');
+                setTimeout(() => {
+                    progressFill.style.opacity = '0';
+                    progressContainer.classList.add('no-border');
+                    setTimeout(() => {
+                        progressLeft.classList.add('animate');
+                        progressRight.classList.add('animate');
+                        setTimeout(() => {
+                            progressContainer.classList.add('final-animation');
+                            setTimeout(() => {
+                                startNextEffect();
+                            }, 3000);
+                        }, 1500);
+                    }, 200);
+                }, 500);
+            }
+        }, 100);
+
+        function startNextEffect() {
+            loader.classList.add('hidden');
+            document.body.classList.add('brand-kits-active');
+            brandKitsContainer.classList.add('visible');
+        }
+
+        // Brand Kits and Graph Script
+        let chartInstances = {};
+        let currentBrand = 'ecorp';
+
+        // Testimonials Scroll Indicator
+        const testimonialsContainer = document.getElementById('testimonialsContainer');
+        const dots = document.querySelectorAll('.scroll-indicator .dot');
+
+        function updateScrollIndicator() {
+            const scrollPosition = testimonialsContainer.scrollLeft;
+            const cardWidth = testimonialsContainer.querySelector('.testimonial-card').offsetWidth + 32; // Including gap
+            const index = Math.round(scrollPosition / cardWidth);
+            dots.forEach((dot, i) => {
+                dot.classList.toggle('active', i === index);
+            });
+        }
+
+        testimonialsContainer.addEventListener('scroll', updateScrollIndicator);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const brandTiles = document.querySelectorAll('.brand-tile');
+            const radioInputs = document.querySelectorAll('input[name="brand"]');
+            const settingsIcons = document.querySelectorAll('.settings-icon');
+            const graphContainer = document.querySelector('.graph-container');
+            const carbonValue = document.getElementById('carbonValue');
+            const carbonChange = document.getElementById('carbonChange');
+            const energyValue = document.getElementById('energyValue');
+            const energyChange = document.getElementById('energyChange');
+            const energyTitle = document.getElementById('energyTitle');
+            const timeline2022 = document.getElementById('timeline2022');
+            const timeline2021 = document.getElementById('timeline2021');
+            const timeline2020 = document.getElementById('timeline2020');
+            const timeline2019 = document.getElementById('timeline2019');
+            const value2022 = document.getElementById('value2022');
+            const value2021 = document.getElementById('value2021');
+            const value2020 = document.getElementById('value2020');
+            const value2019 = document.getElementById('value2019');
+            const carbonBreakdown = document.getElementById('carbonBreakdown');
+            const carbonDownload = document.getElementById('carbonDownload');
+            const energyDownload = document.getElementById('energyDownload');
+
+            selectBrand(0);
+
+            brandTiles.forEach((tile, index) => {
+                tile.addEventListener('click', function(e) {
+                    if (e.target.closest('.settings-icon')) return;
+                    selectBrand(index);
+                });
+
+                tile.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        selectBrand(index);
+                    }
+                });
+            });
+
+            radioInputs.forEach((radio, index) => {
+                radio.addEventListener('change', function() {
+                    if (this.checked) {
+                        selectBrand(index);
+                    }
+                });
+            });
+
+            settingsIcons.forEach((icon, index) => {
+                icon.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const brandName = brandTiles[index].dataset.brand;
+                    handleSettingsClick(brandName);
+                });
+
+                icon.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const brandName = brandTiles[index].dataset.brand;
+                        handleSettingsClick(brandName);
+                    }
+                });
+            });
+
+            carbonBreakdown.addEventListener('click', function(e) {
+                e.preventDefault();
+                showBreakdown('carbon');
+            });
+
+            carbonDownload.addEventListener('click', function(e) {
+                e.preventDefault();
+                downloadData('carbon');
+            });
+
+            energyDownload.addEventListener('click', function(e) {
+                e.preventDefault();
+                downloadData('energyIntensity');
+            });
+
+            function selectBrand(selectedIndex) {
+                brandTiles.forEach((tile, index) => {
+                    const radio = tile.querySelector('input[type="radio"]');
+                    if (index === selectedIndex) {
+                        tile.classList.add('selected');
+                        tile.setAttribute('aria-checked', 'true');
+                        radio.checked = true;
+                    } else {
+                        tile.classList.remove('selected');
+                        tile.setAttribute('aria-checked', 'false');
+                        radio.checked = false;
+                    }
+                });
+
+                currentBrand = brandTiles[selectedIndex].dataset.brand;
+                updateMetrics(currentBrand);
+                graphContainer.classList.add('visible');
+            }
+
+            function handleSettingsClick(brandName) {
+                const settingsIcon = document.querySelector(`[data-brand="${brandName}"] .settings-icon`);
+                settingsIcon.style.transform = 'scale(1.2) rotate(180deg)';
+                setTimeout(() => {
+                    settingsIcon.style.transform = '';
+                }, 200);
+                alert(`Opening settings for ${brandName}`);
+            }
+
+            function updateMetrics(brand) {
+                const data = brandData[brand];
+                carbonValue.textContent = `${data.carbon.value.toLocaleString()}${data.carbon.unit ? ` ${data.carbon.unit}` : ''}`;
+                carbonChange.textContent = `${data.carbon.change} from 2019`;
+                carbonChange.className = 'metric-change ' + (data.carbon.change.includes('+') ? 'positive' : 'negative');
+                energyValue.innerHTML = `${data.energyIntensity.value.toLocaleString()}<span class="metric-unit">${data.energyIntensity.unit}</span>`;
+                energyChange.textContent = `${data.energyIntensity.change} from 2019`;
+                energyChange.className = 'metric-change ' + (data.energyIntensity.change.includes('+') ? 'positive' : 'negative');
+                energyTitle.textContent = data.energyIntensity.title;
+
+                const maxEnergyValue = Math.max(...data.energyIntensity.years);
+                data.energyIntensity.years.forEach((value, index) => {
+                    const percentage = (value / maxEnergyValue) * 100;
+                    const timelineElements = [timeline2022, timeline2021, timeline2020, timeline2019];
+                    const valueElements = [value2022, value2021, value2020, value2019];
+                    timelineElements[index].style.width = `${percentage}%`;
+                    valueElements[index].textContent = value;
+                });
+
+                updateChart('carbonChart', data.carbon.years, data.carbon.unit, brand === 'ecorp' ? '#10b981' : brand === 'icorp' ? '#3b82f6' : '#06b6d4');
+            }
+
+            function updateChart(chartId, data, unit, color) {
+                const ctx = document.getElementById(chartId).getContext('2d');
+                if (chartInstances[chartId]) {
+                    chartInstances[chartId].destroy();
+                }
+                chartInstances[chartId] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['2022', '2021', '2020', '2019'],
+                        datasets: [{
+                            label: 'Value',
+                            data: data,
+                            backgroundColor: color,
+                            borderColor: color,
+                            borderWidth: 0,
+                            barThickness: 20,
+                            maxBarThickness: 30
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.parsed.y.toLocaleString()} ${unit}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    color: '#666',
+                                    font: { size: 11 },
+                                    callback: function(value) { return value.toLocaleString(); }
+                                },
+                                grid: { color: '#e5e5e5', drawBorder: false }
+                            },
+                            x: {
+                                ticks: { color: '#666', font: { size: 11 } },
+                                grid: { display: false, drawBorder: false }
+                            }
+                        },
+                        onHover: (event, chartElement) => {
+                            event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                        }
+                    }
+                });
+            }
+
+            function showBreakdown(type) {
+                alert(`Showing full breakdown of ${type} for ${currentBrand}`);
+            }
+
+            function downloadData(type) {
+                const data = brandData[currentBrand][type];
+                let csvContent = "data:text/csv;charset=utf-8,Year,Value (${data.unit})\r\n";
+                const years = ['2022', '2021', '2020', '2019'];
+                data.years.forEach((value, index) => {
+                    csvContent += `${years[index]},${value}\r\n`;
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `${currentBrand}_${type}_data.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        });
+    </script>
+</body>
+</html>
